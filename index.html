@@ -4,13 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#0b1020" />
-  <title>أداة المسح ثلاثية الأبعاد والقياس الميداني — الجيل السادس</title>
+  <title>أداة المسح ثلاثية الأبعاد والحراري والقياس الميداني</title>
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <style>
     * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
     body, html { margin: 0; padding: 0; height: 100%; background: #0b1020; color: #f1f5f9; overflow: hidden; }
-    #map { position: absolute; inset: 0; width: 100%; height: 100%; }
+    #map { position: absolute; inset: 0; width: 100%; height: 100%; transition: filter 0.25s ease; }
+
+    /* أوضاع العرض للخريطة */
+    body.mode-thermal #map {
+      filter: contrast(1.45) saturate(2.3) hue-rotate(195deg) brightness(1.05);
+    }
+    body.mode-contrast #map {
+      filter: contrast(1.5) saturate(1.35) brightness(0.95);
+    }
 
     .top-bar {
       position: fixed;
@@ -54,7 +62,6 @@
     }
 
     .panel.collapsed .panel-header { margin-bottom: 0; }
-
     .panel-title { font-size: 12px; font-weight: 700; color: #e2e8f0; }
 
     input, select, button {
@@ -82,6 +89,7 @@
     button.success { background: #047857; }
     button.danger { background: #991b1b; }
     button.warn { background: #b45309; }
+    button.thermal-btn { background: #be123c; }
 
     .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
     .row > * { flex: 1; min-width: 80px; }
@@ -174,6 +182,47 @@
       color: #94a3b8;
       margin-top: 4px;
     }
+
+    /* نافذة التصوير الميداني البصري والحراري */
+    .cam-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.96);
+      z-index: 30;
+      display: none;
+      flex-direction: column;
+      padding: 12px;
+      gap: 10px;
+    }
+    .cam-modal.active { display: flex; }
+
+    .cam-stage {
+      position: relative;
+      flex: 1;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      background: #000;
+    }
+
+    #camVideo, #camCanvas {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .cam-hud {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(15, 23, 42, 0.78);
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      color: #f8fafc;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -189,7 +238,7 @@
 
   <div id="controlPanel" class="panel">
     <div class="panel-header">
-      <span class="panel-title">لوحة المسح والقياس الثلاثي الأبعاد</span>
+      <span class="panel-title">لوحة المسح 3D والحراري والقياس</span>
       <button id="togglePanelBtn" class="secondary" style="padding:5px 10px;font-size:11px;" onclick="togglePanel()">طيّ اللوحة</button>
     </div>
 
@@ -224,9 +273,26 @@
       </div>
     </div>
 
-    <div class="range-wrap">
-      <span>المقياس الرأسي 3D: <strong id="exagVal">2.0x</strong></span>
-      <input id="exagRange" type="range" min="1" max="5" step="0.5" value="2" oninput="setExaggeration(this.value)" />
+    <!-- التصوير الثلاثي والحراري -->
+    <div class="section-box">
+      <div class="section-title">التصوير ثلاثي الأبعاد (3D) والحراري (Thermal)</div>
+      <div class="row">
+        <select id="visualMode" onchange="setVisualMode(this.value)">
+          <option value="normal">عرض فضائي 3D عادي</option>
+          <option value="thermal">تصوير حراري محاكى (Thermal)</option>
+          <option value="contrast">تباين عالي (High Contrast)</option>
+        </select>
+        <button class="thermal-btn" onclick="openFieldCamera()">كاميرا حراري / 3D</button>
+        <button class="secondary" onclick="captureMapSnapshot()">لقطة الخريطة</button>
+      </div>
+      <div class="range-wrap">
+        <span>المقياس الرأسي 3D: <strong id="exagVal">2.0x</strong></span>
+        <input id="exagRange" type="range" min="1" max="5" step="0.5" value="2" oninput="setExaggeration(this.value)" />
+      </div>
+      <div class="range-wrap">
+        <span>إمالة 3D (Pitch): <strong id="pitchVal">55°</strong></span>
+        <input id="pitchRange" type="range" min="0" max="80" step="5" value="55" oninput="setPitch(this.value)" />
+      </div>
     </div>
 
     <div class="row">
@@ -294,10 +360,31 @@
     </div>
   </div>
 
+  <!-- نافذة الكاميرا الميدانية البصرية والحرارية -->
+  <div id="camModal" class="cam-modal">
+    <div class="panel-header">
+      <span class="panel-title">التصوير الميداني (بصري / حراري محاكى)</span>
+      <button class="danger" style="padding:6px 12px;" onclick="closeFieldCamera()">إغلاق</button>
+    </div>
+    <div class="cam-stage">
+      <video id="camVideo" autoplay playsinline></video>
+      <canvas id="camCanvas" style="display:none;"></canvas>
+      <div id="camHud" class="cam-hud">الوضع: بصري عادي | في انتظار GPS</div>
+    </div>
+    <div class="row">
+      <select id="camFilterSelect" onchange="applyCamFilter(this.value)">
+        <option value="none">بصري عادي (RGB)</option>
+        <option value="thermal">حراري كاذب (Pseudo-Thermal)</option>
+        <option value="iron">حراري تباين مرتفع (Iron-Like)</option>
+      </select>
+      <button class="success" onclick="snapFieldPhoto()">التقاط وحفظ الصورة</button>
+    </div>
+  </div>
+
   <script>
     (function setupPwaManifest() {
       const manifest = {
-        name: 'أداة المسح ثلاثية الأبعاد والقياس الميداني',
+        name: 'أداة المسح ثلاثية الأبعاد والحراري والقياس الميداني',
         short_name: 'Field3D',
         start_url: './',
         display: 'standalone',
@@ -326,6 +413,7 @@
     let watchId = null;
     let liveUserCoords = null;
     let panelCollapsed = false;
+    let camStream = null;
 
     function togglePanel() {
       panelCollapsed = !panelCollapsed;
@@ -335,8 +423,21 @@
       btn.textContent = panelCollapsed ? 'توسيع اللوحة' : 'طيّ اللوحة';
     }
 
+    function setVisualMode(mode) {
+      document.body.classList.remove('mode-thermal', 'mode-contrast');
+      if (mode === 'thermal') document.body.classList.add('mode-thermal');
+      else if (mode === 'contrast') document.body.classList.add('mode-contrast');
+    }
+
+    function setPitch(val) {
+      const p = parseFloat(val);
+      document.getElementById('pitchVal').textContent = `${Math.round(p)}°`;
+      map.setPitch(p);
+    }
+
     const map = new maplibregl.Map({
       container: 'map',
+      preserveDrawingBuffer: true,
       style: {
         version: 8,
         sources: {
@@ -450,6 +551,96 @@
       points.push({ lon: e.lngLat.lng, lat: e.lngLat.lat, note: '' });
       updateAll(true);
     });
+
+    function captureMapSnapshot() {
+      try {
+        const dataUrl = map.getCanvas().toDataURL('image/png');
+        const a = document.createElement('a');
+        const mode = document.getElementById('visualMode').value;
+        a.href = dataUrl;
+        a.download = `map-3d-${mode}-${Date.now()}.png`;
+        a.click();
+      } catch {
+        alert('تعذر التقاط لقطة الخريطة حالياً');
+      }
+    }
+
+    function applyCamFilter(val) {
+      const video = document.getElementById('camVideo');
+      const hud = document.getElementById('camHud');
+      if (val === 'thermal') {
+        video.style.filter = 'contrast(1.6) saturate(2.6) hue-rotate(190deg) brightness(1.08)';
+      } else if (val === 'iron') {
+        video.style.filter = 'contrast(1.8) saturate(2.8) hue-rotate(310deg) brightness(1.05)';
+      } else {
+        video.style.filter = 'none';
+      }
+      const gpsText = liveUserCoords
+        ? `${liveUserCoords.lat.toFixed(5)}, ${liveUserCoords.lon.toFixed(5)}`
+        : 'بدون GPS';
+      hud.textContent = `الوضع: ${val} | ${gpsText}`;
+    }
+
+    async function openFieldCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        return alert('الكاميرا غير مدعومة في هذا المتصفح أو تحتاج HTTPS');
+      }
+      try {
+        camStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false
+        });
+        const video = document.getElementById('camVideo');
+        video.srcObject = camStream;
+        document.getElementById('camModal').classList.add('active');
+        applyCamFilter(document.getElementById('camFilterSelect').value);
+      } catch {
+        alert('تعذر تشغيل الكاميرا، تحقق من صلاحية الكاميرا في المتصفح');
+      }
+    }
+
+    function closeFieldCamera() {
+      if (camStream) {
+        camStream.getTracks().forEach(t => t.stop());
+        camStream = null;
+      }
+      const canvas = document.getElementById('camCanvas');
+      const video = document.getElementById('camVideo');
+      canvas.style.display = 'none';
+      video.style.display = 'block';
+      document.getElementById('camModal').classList.remove('active');
+    }
+
+    function snapFieldPhoto() {
+      const video = document.getElementById('camVideo');
+      const canvas = document.getElementById('camCanvas');
+      if (!video.videoWidth) return;
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.filter = video.style.filter || 'none';
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.filter = 'none';
+
+      const filterType = document.getElementById('camFilterSelect').value;
+      const gpsText = liveUserCoords
+        ? `GPS: ${liveUserCoords.lat.toFixed(6)}, ${liveUserCoords.lon.toFixed(6)}`
+        : 'GPS: غير متوفر';
+      const stamp = `${new Date().toLocaleString('ar')} | ${filterType} | ${gpsText}`;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+      ctx.fillRect(12, canvas.height - 44, canvas.width - 24, 32);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillText(stamp, 20, canvas.height - 23);
+
+      const url = canvas.toDataURL('image/jpeg', 0.92);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `field-${filterType}-${Date.now()}.jpg`;
+      a.click();
+    }
 
     function toggleDraw() {
       drawing = !drawing;
@@ -844,6 +1035,9 @@
         });
       }
       updateNavigationGuide();
+      if (document.getElementById('camModal').classList.contains('active')) {
+        applyCamFilter(document.getElementById('camFilterSelect').value);
+      }
     }
 
     function locateMe() {
