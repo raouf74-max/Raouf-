@@ -1,1 +1,1082 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>أداة المسح ثلاثية الأبعاد والقياس الميداني — الجيل السادس</title>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body, html { margin: 0; padding: 0; height: 100%; background: #0b1020; color: #f1f5f9; overflow: hidden; }
+    #map { position: absolute; inset: 0; width: 100%; height: 100%; }
 
+    .top-bar {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      z-index: 10;
+      display: flex;
+      gap: 6px;
+    }
+
+    .panel {
+      position: fixed;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      background: rgba(15, 23, 42, 0.96);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 16px;
+      padding: 12px;
+      z-index: 10;
+      max-height: 68vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      transition: max-height 0.25s ease, padding 0.25s ease;
+    }
+
+    .panel.collapsed {
+      max-height: 54px;
+      overflow: hidden;
+      padding: 8px 12px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .panel.collapsed .panel-header { margin-bottom: 0; }
+
+    .panel-title { font-size: 12px; font-weight: 700; color: #e2e8f0; }
+
+    input, select, button {
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      padding: 8px 10px;
+      font-size: 13px;
+    }
+
+    input, select {
+      background: rgba(15, 23, 42, 0.92);
+      color: #fff;
+    }
+
+    .top-bar input { flex: 1; }
+
+    button {
+      background: #1d4ed8;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.secondary { background: #1e293b; }
+    button.success { background: #047857; }
+    button.danger { background: #991b1b; }
+    button.warn { background: #b45309; }
+
+    .row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .row > * { flex: 1; min-width: 80px; }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      text-align: center;
+    }
+
+    .stat-box {
+      background: rgba(30, 41, 59, 0.85);
+      padding: 7px 5px;
+      border-radius: 10px;
+    }
+
+    .stat-label { font-size: 10px; color: #94a3b8; }
+    .stat-val { font-size: 12px; font-weight: 700; color: #38bdf8; margin-top: 2px; }
+
+    .segments-box {
+      margin-top: 8px;
+      background: rgba(2, 6, 23, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 10px;
+      padding: 8px;
+      font-size: 11px;
+      color: #cbd5e1;
+      max-height: 92px;
+      overflow-y: auto;
+    }
+
+    .seg-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      border-bottom: 1px dashed rgba(148, 163, 184, 0.12);
+    }
+    .seg-item:last-child { border-bottom: none; }
+
+    .nav-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      background: rgba(30, 58, 138, 0.35);
+      border: 1px solid rgba(96, 165, 250, 0.35);
+      border-radius: 10px;
+      padding: 8px 10px;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+
+    .section-box {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .section-title { font-size: 12px; font-weight: 700; color: #e2e8f0; margin-bottom: 6px; }
+
+    .range-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+    .range-wrap input[type="range"] { padding: 0; flex: 1; }
+
+    .note-box { display: flex; gap: 6px; margin-top: 6px; }
+    .note-box input { flex: 1; }
+
+    #elevCanvas {
+      width: 100%;
+      height: 82px;
+      background: rgba(2, 6, 23, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 10px;
+      display: block;
+      margin-top: 6px;
+    }
+
+    .elev-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="top-bar">
+    <input id="coordInput" type="text" placeholder="إحداثيات (DMS أو عشري) مثل: 36°04'40.27&quot;N 1°14'19.91&quot;E" />
+    <button onclick="goToInput()">اذهب</button>
+    <button class="secondary" onclick="locateMe()">GPS</button>
+    <button id="trackBtn" class="secondary" onclick="toggleTracking()">تتبع</button>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="controlPanel" class="panel">
+    <div class="panel-header">
+      <span class="panel-title">لوحة المسح والقياس الثلاثي الأبعاد</span>
+      <button id="togglePanelBtn" class="secondary" style="padding:5px 10px;font-size:11px;" onclick="togglePanel()">طيّ اللوحة</button>
+    </div>
+
+    <div class="stats">
+      <div class="stat-box">
+        <div class="stat-label">المساحة (م²)</div>
+        <div class="stat-val" id="areaM2">0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">المساحة (هكتار)</div>
+        <div class="stat-val" id="areaHa">0.0000</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">المسار التراكمي (م)</div>
+        <div class="stat-val" id="cumDistM">0.0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">النقاط</div>
+        <div class="stat-val" id="ptCount">0</div>
+      </div>
+    </div>
+
+    <div class="segments-box" id="segmentsList">
+      المسافات بين النقاط المتتالية: أضف نقطتين أو أكثر لعرضها.
+    </div>
+
+    <div class="nav-banner">
+      <span id="navInfo">الموجه إلى النقطة: فعّل GPS أو حدد نقطة</span>
+      <div style="display:flex;gap:5px;">
+        <button class="secondary" style="padding:5px 8px;font-size:11px;" onclick="selectNearestPoint()">الأقرب</button>
+        <button class="secondary" style="padding:5px 8px;font-size:11px;" onclick="addCurrentGpsPoint()">+ موقعي</button>
+      </div>
+    </div>
+
+    <div class="range-wrap">
+      <span>المقياس الرأسي 3D: <strong id="exagVal">2.0x</strong></span>
+      <input id="exagRange" type="range" min="1" max="5" step="0.5" value="2" oninput="setExaggeration(this.value)" />
+    </div>
+
+    <div class="row">
+      <button id="drawBtn" class="success" onclick="toggleDraw()">بدء رسم المنطقة</button>
+      <button class="secondary" onclick="undoPoint()">تراجع</button>
+      <button class="danger" onclick="clearPoints()">مسح</button>
+    </div>
+
+    <div class="section-box">
+      <div class="section-title">مخطط الارتفاعات على المسار (Elevation Profile)</div>
+      <canvas id="elevCanvas" width="500" height="82"></canvas>
+      <div class="elev-meta">
+        <span id="elevMin">أدنى: —</span>
+        <span id="elevMax">أعلى: —</span>
+        <span id="elevDelta">الفارق: —</span>
+      </div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-title">مولد نقاط المسح (حلزوني / شبكي)</div>
+      <div class="row">
+        <select id="patternType">
+          <option value="spiral">مسار حلزوني (Spiral)</option>
+          <option value="grid">شبكة نقاط (Grid)</option>
+        </select>
+        <input id="stepM" type="number" step="0.5" min="1" value="5" placeholder="الخطوة (م)" />
+        <input id="radiusM" type="number" step="1" min="5" value="25" placeholder="نصف القطر (م)" />
+        <button class="warn" onclick="generateSurveyPattern()">توليد</button>
+      </div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-title">ملاحظة النقطة المحددة</div>
+      <div class="note-box">
+        <select id="pointSelect" onchange="onPointSelectChange()"></select>
+        <input id="pointNoteInput" type="text" placeholder="ملاحظة ميدانية للنقطة..." oninput="savePointNote()" />
+      </div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-title">المشاريع المحفوظة محلياً</div>
+      <div class="row">
+        <input id="projectName" type="text" placeholder="اسم المشروع..." />
+        <button class="success" onclick="saveProject()">حفظ</button>
+      </div>
+      <div class="row">
+        <select id="savedProjects"></select>
+        <button class="secondary" onclick="loadProject()">فتح</button>
+        <button class="danger" onclick="deleteProject()">حذف</button>
+      </div>
+    </div>
+
+    <div class="section-box">
+      <div class="section-title">استيراد وتصدير البيانات</div>
+      <div class="row">
+        <button class="warn" onclick="triggerImport()">استيراد GPX/KML/CSV</button>
+        <input id="importFileInput" type="file" accept=".gpx,.kml,.csv,text/csv,application/xml,text/xml" style="display:none" onchange="handleFileImport(event)" />
+      </div>
+      <div class="row">
+        <button class="secondary" onclick="exportGPX()">تصدير GPX</button>
+        <button class="secondary" onclick="exportKML()">تصدير KML</button>
+        <button class="secondary" onclick="exportCSV()">تصدير CSV</button>
+        <button onclick="exportReport()">تقرير HTML</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function setupPwaManifest() {
+      const manifest = {
+        name: 'أداة المسح ثلاثية الأبعاد والقياس الميداني',
+        short_name: 'Field3D',
+        start_url: './',
+        display: 'standalone',
+        background_color: '#0b1020',
+        theme_color: '#0b1020'
+      };
+      const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = URL.createObjectURL(blob);
+      document.head.appendChild(link);
+
+      if ('serviceWorker' in navigator && location.protocol === 'https:') {
+        const swCode = `
+          self.addEventListener('install', (e) => self.skipWaiting());
+          self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+        `;
+        const swBlob = new Blob([swCode], { type: 'application/javascript' });
+        navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
+      }
+    })();
+
+    let points = [];
+    let drawing = false;
+    let exaggeration = 2.0;
+    let watchId = null;
+    let liveUserCoords = null;
+    let panelCollapsed = false;
+
+    function togglePanel() {
+      panelCollapsed = !panelCollapsed;
+      const panel = document.getElementById('controlPanel');
+      const btn = document.getElementById('togglePanelBtn');
+      panel.classList.toggle('collapsed', panelCollapsed);
+      btn.textContent = panelCollapsed ? 'توسيع اللوحة' : 'طيّ اللوحة';
+    }
+
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        sources: {
+          satellite: {
+            type: 'raster',
+            tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+            tileSize: 256,
+            maxzoom: 19
+          },
+          terrainDem: {
+            type: 'raster-dem',
+            tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+            encoding: 'terrarium',
+            tileSize: 256,
+            maxzoom: 15
+          }
+        },
+        layers: [
+          { id: 'satellite-layer', type: 'raster', source: 'satellite' }
+        ],
+        terrain: { source: 'terrainDem', exaggeration: exaggeration }
+      },
+      center: [1.23886, 36.07785],
+      zoom: 14,
+      pitch: 55,
+      bearing: -15
+    });
+
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
+
+    map.on('load', () => {
+      map.addSource('survey-src', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      map.addSource('user-pos-src', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      map.addSource('guide-line-src', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      map.addLayer({
+        id: 'survey-fill',
+        type: 'fill',
+        source: 'survey-src',
+        filter: ['==', '$type', 'Polygon'],
+        paint: { 'fill-color': '#22c55e', 'fill-opacity': 0.22 }
+      });
+
+      map.addLayer({
+        id: 'survey-line',
+        type: 'line',
+        source: 'survey-src',
+        filter: ['==', '$type', 'LineString'],
+        paint: { 'line-color': '#38bdf8', 'line-width': 2.5 }
+      });
+
+      map.addLayer({
+        id: 'survey-pts',
+        type: 'circle',
+        source: 'survey-src',
+        filter: ['==', '$type', 'Point'],
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#f59e0b',
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#ffffff'
+        }
+      });
+
+      map.addLayer({
+        id: 'guide-line-layer',
+        type: 'line',
+        source: 'guide-line-src',
+        paint: {
+          'line-color': '#f43f5e',
+          'line-width': 2.5,
+          'line-dasharray': [2, 2]
+        }
+      });
+
+      map.addLayer({
+        id: 'user-pos-pt',
+        type: 'circle',
+        source: 'user-pos-src',
+        paint: {
+          'circle-radius': 8,
+          'circle-color': '#ef4444',
+          'circle-stroke-width': 2.5,
+          'circle-stroke-color': '#ffffff'
+        }
+      });
+
+      refreshProjectList();
+      drawElevationProfile([]);
+      updateNavigationGuide();
+      renderSegmentsSummary(points);
+    });
+
+    map.on('moveend', () => {
+      if (points.length >= 2) drawElevationProfile(points);
+    });
+
+    map.on('click', (e) => {
+      if (!drawing) return;
+      points.push({ lon: e.lngLat.lng, lat: e.lngLat.lat, note: '' });
+      updateAll(true);
+    });
+
+    function toggleDraw() {
+      drawing = !drawing;
+      const btn = document.getElementById('drawBtn');
+      btn.textContent = drawing ? 'إيقاف الرسم' : 'بدء رسم المنطقة';
+      btn.className = drawing ? 'danger' : 'success';
+    }
+
+    function undoPoint() {
+      points.pop();
+      updateAll(true);
+    }
+
+    function clearPoints() {
+      points = [];
+      updateAll(true);
+    }
+
+    function setExaggeration(val) {
+      exaggeration = parseFloat(val);
+      document.getElementById('exagVal').textContent = exaggeration.toFixed(1) + 'x';
+      map.setTerrain({ source: 'terrainDem', exaggeration: exaggeration });
+      if (points.length >= 2) drawElevationProfile(points);
+    }
+
+    function distanceMeters(p1, p2) {
+      const R = 6378137;
+      const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+      const dLon = (p2.lon - p1.lon) * Math.PI / 180;
+      const lat1 = p1.lat * Math.PI / 180;
+      const lat2 = p2.lat * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function getConsecutiveSegments(pts) {
+      if (!pts || pts.length < 2) return [];
+      const segments = [];
+      let cumulative = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const segDist = distanceMeters(pts[i], pts[i + 1]);
+        cumulative += segDist;
+        segments.push({
+          from: i + 1,
+          to: i + 2,
+          distanceM: segDist,
+          cumulativeM: cumulative
+        });
+      }
+      return segments;
+    }
+
+    function computeCumulativePathM(pts) {
+      const segs = getConsecutiveSegments(pts);
+      return segs.length ? segs[segs.length - 1].cumulativeM : 0;
+    }
+
+    function renderSegmentsSummary(pts) {
+      const box = document.getElementById('segmentsList');
+      const segs = getConsecutiveSegments(pts);
+      if (!segs.length) {
+        box.textContent = 'المسافات بين النقاط المتتالية: أضف نقطتين أو أكثر لعرضها.';
+        return;
+      }
+      box.innerHTML = segs.map(s =>
+        `<div class="seg-item"><span>#${s.from} ← #${s.to}</span><span>${s.distanceM.toFixed(1)} م (تراكمي: ${s.cumulativeM.toFixed(1)} م)</span></div>`
+      ).join('');
+    }
+
+    function bearingDegrees(p1, p2) {
+      const lat1 = p1.lat * Math.PI / 180;
+      const lat2 = p2.lat * Math.PI / 180;
+      const dLon = (p2.lon - p1.lon) * Math.PI / 180;
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+    }
+
+    function bearingToCardinal(deg) {
+      const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      return dirs[Math.round(deg / 45) % 8];
+    }
+
+    function updateNavigationGuide() {
+      const navEl = document.getElementById('navInfo');
+      const idx = parseInt(document.getElementById('pointSelect').value, 10);
+      const target = (!isNaN(idx) && points[idx]) ? points[idx] : null;
+
+      if (!liveUserCoords || !target) {
+        if (map.getSource('guide-line-src')) {
+          map.getSource('guide-line-src').setData({ type: 'FeatureCollection', features: [] });
+        }
+        navEl.textContent = !liveUserCoords
+          ? 'الموجه: اضغط GPS أو تتبع لتحديد موقعك'
+          : 'الموجه: أضف أو اختر نقطة لتوجيه المسار';
+        return;
+      }
+
+      const dist = distanceMeters(liveUserCoords, target);
+      const brg = bearingDegrees(liveUserCoords, target);
+      const card = bearingToCardinal(brg);
+      navEl.textContent = `إلى نقطة #${idx + 1}: ${dist.toFixed(1)} م | ${Math.round(brg)}° (${card})`;
+
+      if (map.getSource('guide-line-src')) {
+        map.getSource('guide-line-src').setData({
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: [[liveUserCoords.lon, liveUserCoords.lat], [target.lon, target.lat]]
+            }
+          }]
+        });
+      }
+    }
+
+    function selectNearestPoint() {
+      if (!liveUserCoords) return alert('حدّد موقعك أولاً عبر GPS أو تتبع');
+      if (!points.length) return alert('لا توجد نقاط محددة');
+      let bestIdx = 0;
+      let bestDist = Infinity;
+      points.forEach((p, i) => {
+        const d = distanceMeters(liveUserCoords, p);
+        if (d < bestDist) {
+          bestDist = d;
+          bestIdx = i;
+        }
+      });
+      document.getElementById('pointSelect').selectedIndex = bestIdx;
+      onPointSelectChange();
+      map.flyTo({ center: [points[bestIdx].lon, points[bestIdx].lat], zoom: 17 });
+    }
+
+    function addCurrentGpsPoint() {
+      if (!navigator.geolocation) return alert('GPS غير مدعوم في هذا المتصفح');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { longitude, latitude } = pos.coords;
+          updateUserPosLayer(longitude, latitude);
+          points.push({ lon: longitude, lat: latitude, note: 'نقطة GPS ميدانية' });
+          updateAll(true);
+          map.flyTo({ center: [longitude, latitude], zoom: 17 });
+        },
+        () => alert('تعذر تسجيل الموقع الحالي')
+      );
+    }
+
+    function computeAreaM2(pts) {
+      if (pts.length < 3) return 0;
+      const R = 6378137;
+      let area = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const p1 = pts[i];
+        const p2 = pts[(i + 1) % pts.length];
+        const x1 = p1.lon * Math.PI / 180 * R * Math.cos(p1.lat * Math.PI / 180);
+        const y1 = p1.lat * Math.PI / 180 * R;
+        const x2 = p2.lon * Math.PI / 180 * R * Math.cos(p2.lat * Math.PI / 180);
+        const y2 = p2.lat * Math.PI / 180 * R;
+        area += (x1 * y2 - x2 * y1);
+      }
+      return Math.abs(area) / 2;
+    }
+
+    function drawElevationProfile(pts) {
+      const canvas = document.getElementById('elevCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const minElEl = document.getElementById('elevMin');
+      const maxElEl = document.getElementById('elevMax');
+      const deltaElEl = document.getElementById('elevDelta');
+
+      if (!pts || pts.length < 2) {
+        minElEl.textContent = 'أدنى: —';
+        maxElEl.textContent = 'أعلى: —';
+        deltaElEl.textContent = 'الفارق: —';
+        return;
+      }
+
+      const sampled = pts.slice(0, 80).map((p, idx) => {
+        const raw = map.queryTerrainElevation([p.lon, p.lat]);
+        const elev = (typeof raw === 'number' && !isNaN(raw)) ? raw : null;
+        return { idx, elev };
+      }).filter(item => item.elev !== null);
+
+      if (sampled.length < 2) {
+        minElEl.textContent = 'أدنى: غير متاح بعد';
+        maxElEl.textContent = 'أعلى: غير متاح بعد';
+        deltaElEl.textContent = 'الفارق: —';
+        return;
+      }
+
+      const vals = sampled.map(s => s.elev);
+      const minV = Math.min(...vals);
+      const maxV = Math.max(...vals);
+      const deltaV = maxV - minV;
+      const range = Math.max(1, deltaV);
+
+      minElEl.textContent = `أدنى: ${minV.toFixed(1)} م`;
+      maxElEl.textContent = `أعلى: ${maxV.toFixed(1)} م`;
+      deltaElEl.textContent = `الفارق: ${deltaV.toFixed(1)} م`;
+
+      const padX = 12;
+      const padY = 12;
+      const w = canvas.width - padX * 2;
+      const h = canvas.height - padY * 2;
+
+      ctx.beginPath();
+      sampled.forEach((s, i) => {
+        const x = padX + (i / (sampled.length - 1)) * w;
+        const y = padY + h - ((s.elev - minV) / range) * h;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      ctx.lineTo(padX + w, padY + h);
+      ctx.lineTo(padX, padY + h);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.18)';
+      ctx.fill();
+    }
+
+    function offsetLatLon(lat, lon, northM, eastM) {
+      const R = 6378137;
+      const dLat = northM / R;
+      const dLon = eastM / (R * Math.cos(lat * Math.PI / 180));
+      return {
+        lat: lat + (dLat * 180 / Math.PI),
+        lon: lon + (dLon * 180 / Math.PI)
+      };
+    }
+
+    function generateSurveyPattern() {
+      const type = document.getElementById('patternType').value;
+      const step = Math.max(1, parseFloat(document.getElementById('stepM').value) || 5);
+      const radius = Math.max(5, parseFloat(document.getElementById('radiusM').value) || 25);
+
+      const center = points.length
+        ? { lat: points[points.length - 1].lat, lon: points[points.length - 1].lon }
+        : { lat: map.getCenter().lat, lon: map.getCenter().lng };
+
+      const generated = [];
+      if (type === 'spiral') {
+        let r = 0;
+        let angle = 0;
+        const dAngle = 0.65;
+        while (r <= radius) {
+          const pt = offsetLatLon(center.lat, center.lon, r * Math.cos(angle), r * Math.sin(angle));
+          generated.push({ lon: pt.lon, lat: pt.lat, note: `Spiral r=${r.toFixed(1)}m` });
+          r += (step * dAngle) / (2 * Math.PI);
+          angle += dAngle;
+        }
+      } else {
+        for (let y = -radius; y <= radius; y += step) {
+          for (let x = -radius; x <= radius; x += step) {
+            if (Math.hypot(x, y) <= radius) {
+              const pt = offsetLatLon(center.lat, center.lon, y, x);
+              generated.push({ lon: pt.lon, lat: pt.lat, note: `Grid (${x}m, ${y}m)` });
+            }
+          }
+        }
+      }
+
+      if (!generated.length) return alert('تعذر توليد نقاط بهذه القيم');
+      points = generated;
+      updateAll(true);
+      map.flyTo({ center: [center.lon, center.lat], zoom: 17 });
+    }
+
+    function updatePointSelector(selectLast = false) {
+      const sel = document.getElementById('pointSelect');
+      const prevIdx = sel.selectedIndex;
+      sel.innerHTML = '';
+      points.forEach((p, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `نقطة #${i + 1}`;
+        sel.appendChild(opt);
+      });
+      if (!points.length) {
+        document.getElementById('pointNoteInput').value = '';
+        return;
+      }
+      sel.selectedIndex = selectLast ? points.length - 1 : Math.min(Math.max(0, prevIdx), points.length - 1);
+      loadPointNote();
+    }
+
+    function onPointSelectChange() {
+      loadPointNote();
+      updateNavigationGuide();
+    }
+
+    function loadPointNote() {
+      const idx = parseInt(document.getElementById('pointSelect').value, 10);
+      document.getElementById('pointNoteInput').value = (!isNaN(idx) && points[idx]) ? (points[idx].note || '') : '';
+    }
+
+    function savePointNote() {
+      const idx = parseInt(document.getElementById('pointSelect').value, 10);
+      if (!isNaN(idx) && points[idx]) {
+        points[idx].note = document.getElementById('pointNoteInput').value;
+      }
+    }
+
+    function updateAll(selectLast = false) {
+      const features = points.map((pt, idx) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [pt.lon, pt.lat] },
+        properties: { index: idx + 1, note: pt.note || '' }
+      }));
+
+      if (points.length >= 2) {
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: points.map(p => [p.lon, p.lat]) }
+        });
+      }
+
+      if (points.length >= 3) {
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Polygon', coordinates: [[...points.map(p => [p.lon, p.lat]), [points[0].lon, points[0].lat]]] }
+        });
+      }
+
+      if (map.getSource('survey-src')) {
+        map.getSource('survey-src').setData({ type: 'FeatureCollection', features });
+      }
+
+      const m2 = computeAreaM2(points);
+      const ha = m2 / 10000;
+      const cumDist = computeCumulativePathM(points);
+
+      document.getElementById('areaM2').textContent = Math.round(m2).toLocaleString('en-US');
+      document.getElementById('areaHa').textContent = ha.toFixed(4);
+      document.getElementById('cumDistM').textContent = cumDist.toFixed(1);
+      document.getElementById('ptCount').textContent = points.length;
+
+      renderSegmentsSummary(points);
+      updatePointSelector(selectLast);
+      drawElevationProfile(points);
+      updateNavigationGuide();
+    }
+
+    function parseCoords(str) {
+      const decMatch = str.trim().match(/(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)/);
+      const dmsRegex = /(\d+)[°:\s]+(\d+)[':\s]+(\d+(?:\.\d+)?)"?\s*([NSEW])/gi;
+      const matches = [...str.matchAll(dmsRegex)];
+
+      if (matches.length >= 2) {
+        const toDec = (m) => {
+          let val = parseFloat(m[1]) + parseFloat(m[2]) / 60 + parseFloat(m[3]) / 3600;
+          const dir = m[4].toUpperCase();
+          if (dir === 'S' || dir === 'W') val *= -1;
+          return { val, dir };
+        };
+        let lat = null, lon = null;
+        for (const m of matches) {
+          const parsed = toDec(m);
+          if (parsed.dir === 'N' || parsed.dir === 'S') lat = parsed.val;
+          if (parsed.dir === 'E' || parsed.dir === 'W') lon = parsed.val;
+        }
+        if (lat !== null && lon !== null) return [lon, lat];
+      }
+
+      if (decMatch) {
+        return [parseFloat(decMatch[2]), parseFloat(decMatch[1])];
+      }
+      return null;
+    }
+
+    function goToInput() {
+      const val = document.getElementById('coordInput').value;
+      const coords = parseCoords(val);
+      if (!coords || isNaN(coords[0]) || isNaN(coords[1])) {
+        alert('يرجى إدخال إحداثيات صحيحة');
+        return;
+      }
+      map.flyTo({ center: coords, zoom: 16 });
+    }
+
+    function updateUserPosLayer(lon, lat) {
+      liveUserCoords = { lon, lat };
+      if (map.getSource('user-pos-src')) {
+        map.getSource('user-pos-src').setData({
+          type: 'FeatureCollection',
+          features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] } }]
+        });
+      }
+      updateNavigationGuide();
+    }
+
+    function locateMe() {
+      if (!navigator.geolocation) return alert('GPS غير مدعوم في هذا المتصفح');
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { longitude, latitude } = pos.coords;
+          updateUserPosLayer(longitude, latitude);
+          map.flyTo({ center: [longitude, latitude], zoom: 16 });
+        },
+        () => alert('تعذر الحصول على الموقع الحالي')
+      );
+    }
+
+    function toggleTracking() {
+      const btn = document.getElementById('trackBtn');
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        btn.textContent = 'تتبع';
+        btn.className = 'secondary';
+        return;
+      }
+      if (!navigator.geolocation) return alert('GPS غير مدعوم في هذا المتصفح');
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { longitude, latitude } = pos.coords;
+          updateUserPosLayer(longitude, latitude);
+          map.easeTo({ center: [longitude, latitude], duration: 400 });
+        },
+        () => alert('تعذر متابعة الموقع المباشر'),
+        { enableHighAccuracy: true }
+      );
+      btn.textContent = 'إيقاف';
+      btn.className = 'danger';
+    }
+
+    function triggerImport() {
+      document.getElementById('importFileInput').click();
+    }
+
+    function parseCsvLine(line) {
+      const res = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; }
+          else inQuotes = !inQuotes;
+        } else if (ch === ',' && !inQuotes) {
+          res.push(cur);
+          cur = '';
+        } else {
+          cur += ch;
+        }
+      }
+      res.push(cur);
+      return res;
+    }
+
+    function handleFileImport(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = String(e.target.result || '');
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        const imported = [];
+
+        if (ext === 'csv') {
+          const lines = text.split(/\r?\n/).filter(l => l.trim());
+          lines.forEach((line, idx) => {
+            const cols = parseCsvLine(line);
+            const lat = parseFloat(cols[1]);
+            const lon = parseFloat(cols[2]);
+            if (idx === 0 && (isNaN(lat) || isNaN(lon))) return;
+            if (!isNaN(lat) && !isNaN(lon)) {
+              imported.push({ lat, lon, note: cols[3] || '' });
+            }
+          });
+        } else if (ext === 'gpx') {
+          const xml = new DOMParser().parseFromString(text, 'application/xml');
+          xml.querySelectorAll('wpt, trkpt').forEach(pt => {
+            const lat = parseFloat(pt.getAttribute('lat'));
+            const lon = parseFloat(pt.getAttribute('lon'));
+            const desc = (pt.querySelector('desc')?.textContent || pt.querySelector('name')?.textContent || '').trim();
+            if (!isNaN(lat) && !isNaN(lon)) imported.push({ lat, lon, note: desc });
+          });
+        } else if (ext === 'kml') {
+          const xml = new DOMParser().parseFromString(text, 'application/xml');
+          xml.querySelectorAll('Placemark').forEach(pm => {
+            const desc = (pm.querySelector('description')?.textContent || '').trim();
+            const coordText = (pm.querySelector('coordinates')?.textContent || '').trim();
+            coordText.split(/\s+/).forEach(tuple => {
+              const parts = tuple.split(',');
+              const lon = parseFloat(parts[0]);
+              const lat = parseFloat(parts[1]);
+              if (!isNaN(lat) && !isNaN(lon)) imported.push({ lat, lon, note: desc });
+            });
+          });
+        }
+
+        if (!imported.length) return alert('لم يتم العثور على إحداثيات صالحة في الملف');
+        points = imported;
+        updateAll(false);
+        map.flyTo({ center: [points[0].lon, points[0].lat], zoom: 16 });
+        alert(`تم استيراد ${points.length} نقطة بنجاح`);
+      };
+      reader.readAsText(file);
+      event.target.value = '';
+    }
+
+    function getProjectsStore() {
+      try { return JSON.parse(localStorage.getItem('field3d_projects') || '{}'); }
+      catch { return {}; }
+    }
+
+    function refreshProjectList() {
+      const store = getProjectsStore();
+      const sel = document.getElementById('savedProjects');
+      sel.innerHTML = '';
+      Object.keys(store).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+    }
+
+    function saveProject() {
+      const name = (document.getElementById('projectName').value || '').trim();
+      if (!name) return alert('اكتب اسم المشروع أولاً');
+      if (!points.length) return alert('لا توجد نقاط لحفظها');
+      const store = getProjectsStore();
+      store[name] = {
+        points,
+        exaggeration,
+        center: map.getCenter(),
+        zoom: map.getZoom(),
+        updatedAt: new Date().toISOString()
+      };
+      localStorage.setItem('field3d_projects', JSON.stringify(store));
+      refreshProjectList();
+      document.getElementById('savedProjects').value = name;
+      alert('تم حفظ المشروع محلياً');
+    }
+
+    function loadProject() {
+      const name = document.getElementById('savedProjects').value;
+      const store = getProjectsStore();
+      const proj = store[name];
+      if (!proj) return alert('اختر مشروعاً محفوظاً');
+      points = proj.points || [];
+      exaggeration = proj.exaggeration || 2.0;
+      document.getElementById('exagRange').value = exaggeration;
+      setExaggeration(exaggeration);
+      if (proj.center) map.flyTo({ center: [proj.center.lng, proj.center.lat], zoom: proj.zoom || 16 });
+      updateAll(false);
+    }
+
+    function deleteProject() {
+      const name = document.getElementById('savedProjects').value;
+      if (!name) return;
+      const store = getProjectsStore();
+      delete store[name];
+      localStorage.setItem('field3d_projects', JSON.stringify(store));
+      refreshProjectList();
+    }
+
+    function downloadFile(filename, content, mime) {
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function escapeXml(str) {
+      return String(str || '').replace(/[<>&'"]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;' }[c]));
+    }
+
+    function exportGPX() {
+      if (!points.length) return alert('لا توجد نقاط للتصدير');
+      const wpts = points.map((p, i) =>
+        `<wpt lat="${p.lat}" lon="${p.lon}"><name>Point ${i + 1}</name><desc>${escapeXml(p.note)}</desc></wpt>`
+      ).join('\n');
+      const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Field3D">\n${wpts}\n</gpx>`;
+      downloadFile('field-survey.gpx', gpx, 'application/gpx+xml');
+    }
+
+    function exportKML() {
+      if (!points.length) return alert('لا توجد نقاط للتصدير');
+      const coordsStr = points.map(p => `${p.lon},${p.lat},0`).join(' ');
+      const placemarks = points.map((p, i) =>
+        `<Placemark><name>Point ${i + 1}</name><description>${escapeXml(p.note)}</description><Point><coordinates>${p.lon},${p.lat},0</coordinates></Point></Placemark>`
+      ).join('\n');
+      const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n<Placemark><name>Survey Path</name><LineString><coordinates>${coordsStr}</coordinates></LineString></Placemark>\n${placemarks}\n</Document>\n</kml>`;
+      downloadFile('field-survey.kml', kml, 'application/vnd.google-earth.kml+xml');
+    }
+
+    function exportCSV() {
+      if (!points.length) return alert('لا توجد نقاط للتصدير');
+      const rows = ['index,latitude,longitude,segment_from_prev_m,cumulative_m,note'];
+      let cum = 0;
+      points.forEach((p, i) => {
+        const seg = i > 0 ? distanceMeters(points[i - 1], p) : 0;
+        cum += seg;
+        rows.push(`${i + 1},${p.lat},${p.lon},${seg.toFixed(2)},${cum.toFixed(2)},"${String(p.note || '').replace(/"/g, '""')}"`);
+      });
+      downloadFile('field-survey.csv', rows.join('\n'), 'text/csv;charset=utf-8');
+    }
+
+    function exportReport() {
+      if (!points.length) return alert('لا توجد نقاط لتوليد تقرير');
+      const title = escapeXml((document.getElementById('projectName').value || 'تقرير مسح ميداني').trim());
+      const m2 = Math.round(computeAreaM2(points)).toLocaleString('en-US');
+      const ha = (computeAreaM2(points) / 10000).toFixed(4);
+      const cumDist = computeCumulativePathM(points).toFixed(1);
+      const rowsHtml = points.map((p, i) => {
+        const seg = i > 0 ? `${distanceMeters(points[i - 1], p).toFixed(1)} م` : '—';
+        return `<tr><td>${i + 1}</td><td>${p.lat.toFixed(6)}</td><td>${p.lon.toFixed(6)}</td><td>${seg}</td><td>${escapeXml(p.note || '—')}</td></tr>`;
+      }).join('');
+
+      const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title>
+      <style>body{font-family:sans-serif;padding:24px;color:#0f172a}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #cbd5e1;padding:8px;text-align:right}th{background:#f1f5f9}</style></head>
+      <body><h1>${title}</h1><p>التاريخ: ${new Date().toLocaleString('ar')}</p>
+      <p><strong>المساحة:</strong> ${m2} م² (${ha} هكتار) | <strong>المسار التراكمي:</strong> ${cumDist} م | <strong>عدد النقاط:</strong> ${points.length}</p>
+      <table><thead><tr><th>#</th><th>خط العرض (Lat)</th><th>خط الطول (Lon)</th><th>المسافة عن السابقة</th><th>الملاحظة</th></tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
+      downloadFile('survey-report.html', html, 'text/html;charset=utf-8');
+    }
+  </script>
+</body>
+</html>
