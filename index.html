@@ -12,7 +12,6 @@
     body, html { margin: 0; padding: 0; height: 100%; background: #0b1020; color: #f1f5f9; overflow: hidden; }
     #map { position: absolute; inset: 0; width: 100%; height: 100%; transition: filter 0.25s ease; }
 
-    /* أوضاع العرض للخريطة */
     body.mode-thermal #map {
       filter: contrast(1.45) saturate(2.3) hue-rotate(195deg) brightness(1.05);
     }
@@ -41,7 +40,7 @@
       border-radius: 16px;
       padding: 12px;
       z-index: 10;
-      max-height: 68vh;
+      max-height: 70vh;
       overflow-y: auto;
       box-shadow: 0 10px 30px rgba(0,0,0,0.6);
       transition: max-height 0.25s ease, padding 0.25s ease;
@@ -110,7 +109,7 @@
     .stat-label { font-size: 10px; color: #94a3b8; }
     .stat-val { font-size: 12px; font-weight: 700; color: #38bdf8; margin-top: 2px; }
 
-    .segments-box {
+    .segments-box, .coord-card {
       margin-top: 8px;
       background: rgba(2, 6, 23, 0.65);
       border: 1px solid rgba(148, 163, 184, 0.18);
@@ -118,8 +117,38 @@
       padding: 8px;
       font-size: 11px;
       color: #cbd5e1;
+    }
+
+    .segments-box {
       max-height: 92px;
       overflow-y: auto;
+    }
+
+    .coord-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .coord-text {
+      font-family: monospace;
+      font-size: 11px;
+      color: #7dd3fc;
+      direction: ltr;
+      text-align: left;
+      word-break: break-all;
+    }
+
+    .point-photo-preview {
+      margin-top: 8px;
+      max-width: 100%;
+      max-height: 150px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      display: none;
+      object-fit: cover;
     }
 
     .seg-item {
@@ -183,7 +212,6 @@
       margin-top: 4px;
     }
 
-    /* نافذة التصوير الميداني البصري والحراري */
     .cam-modal {
       position: fixed;
       inset: 0;
@@ -273,7 +301,6 @@
       </div>
     </div>
 
-    <!-- التصوير الثلاثي والحراري -->
     <div class="section-box">
       <div class="section-title">التصوير ثلاثي الأبعاد (3D) والحراري (Thermal)</div>
       <div class="row">
@@ -309,6 +336,9 @@
         <span id="elevMax">أعلى: —</span>
         <span id="elevDelta">الفارق: —</span>
       </div>
+      <div class="row">
+        <button class="secondary" onclick="exportElevationCSV()">تصدير الارتفاعات (Elevation CSV)</button>
+      </div>
     </div>
 
     <div class="section-box">
@@ -325,10 +355,23 @@
     </div>
 
     <div class="section-box">
-      <div class="section-title">ملاحظة النقطة المحددة</div>
+      <div class="section-title">بيانات النقطة المحددة والصورة المرفقة</div>
       <div class="note-box">
         <select id="pointSelect" onchange="onPointSelectChange()"></select>
         <input id="pointNoteInput" type="text" placeholder="ملاحظة ميدانية للنقطة..." oninput="savePointNote()" />
+      </div>
+
+      <div class="coord-card">
+        <div class="coord-card-top">
+          <div id="selectedCoordText" class="coord-text">Lat: — | Lon: — | Elev: —</div>
+          <button class="secondary" style="padding:4px 8px;font-size:11px;" onclick="copySelectedCoord()">نسخ الإحداثيات</button>
+        </div>
+        <div class="row">
+          <button class="secondary" style="padding:6px 8px;font-size:11px;" onclick="triggerAttachPhoto()">ربط صورة بالنقطة الحالية</button>
+          <button class="danger" style="padding:6px 8px;font-size:11px;" onclick="removePointPhoto()">إزالة الصورة</button>
+          <input id="pointPhotoInput" type="file" accept="image/*" style="display:none" onchange="handlePointPhoto(event)" />
+        </div>
+        <img id="pointPhotoPreview" class="point-photo-preview" alt="صورة النقطة المحددة" />
       </div>
     </div>
 
@@ -348,8 +391,8 @@
     <div class="section-box">
       <div class="section-title">استيراد وتصدير البيانات</div>
       <div class="row">
-        <button class="warn" onclick="triggerImport()">استيراد GPX/KML/CSV</button>
-        <input id="importFileInput" type="file" accept=".gpx,.kml,.csv,text/csv,application/xml,text/xml" style="display:none" onchange="handleFileImport(event)" />
+        <button class="warn" onclick="triggerImport()">استيراد GPX/KML/CSV/GeoJSON</button>
+        <input id="importFileInput" type="file" accept=".gpx,.kml,.csv,.geojson,.json,text/csv,application/xml,text/xml,application/geo+json,application/json" style="display:none" onchange="handleFileImport(event)" />
       </div>
       <div class="row">
         <button class="secondary" onclick="exportGPX()">تصدير GPX</button>
@@ -360,7 +403,6 @@
     </div>
   </div>
 
-  <!-- نافذة الكاميرا الميدانية البصرية والحرارية -->
   <div id="camModal" class="cam-modal">
     <div class="panel-header">
       <span class="panel-title">التصوير الميداني (بصري / حراري محاكى)</span>
@@ -540,17 +582,120 @@
       drawElevationProfile([]);
       updateNavigationGuide();
       renderSegmentsSummary(points);
+      updateSelectedPointDetails();
     });
 
     map.on('moveend', () => {
       if (points.length >= 2) drawElevationProfile(points);
+      updateSelectedPointDetails();
     });
 
     map.on('click', (e) => {
       if (!drawing) return;
-      points.push({ lon: e.lngLat.lng, lat: e.lngLat.lat, note: '' });
+      points.push({ lon: e.lngLat.lng, lat: e.lngLat.lat, note: '', photoDataUrl: null });
       updateAll(true);
     });
+
+    function getPointElevationMeters(pt) {
+      if (!pt) return null;
+      const raw = map.queryTerrainElevation([pt.lon, pt.lat]);
+      return (typeof raw === 'number' && !isNaN(raw)) ? raw : null;
+    }
+
+    function updateSelectedPointDetails() {
+      const idx = parseInt(document.getElementById('pointSelect').value, 10);
+      const coordEl = document.getElementById('selectedCoordText');
+      const imgEl = document.getElementById('pointPhotoPreview');
+
+      if (isNaN(idx) || !points[idx]) {
+        coordEl.textContent = 'Lat: — | Lon: — | Elev: —';
+        imgEl.style.display = 'none';
+        imgEl.removeAttribute('src');
+        return;
+      }
+
+      const pt = points[idx];
+      const elev = getPointElevationMeters(pt);
+      const elevText = elev !== null ? `${elev.toFixed(1)} m` : 'N/A';
+      coordEl.textContent = `Lat: ${pt.lat.toFixed(6)} | Lon: ${pt.lon.toFixed(6)} | Elev: ${elevText}`;
+
+      if (pt.photoDataUrl) {
+        imgEl.src = pt.photoDataUrl;
+        imgEl.style.display = 'block';
+      } else {
+        imgEl.style.display = 'none';
+        imgEl.removeAttribute('src');
+      }
+    }
+
+    function copySelectedCoord() {
+      const idx = parseInt(document.getElementById('pointSelect').value, 10);
+      if (isNaN(idx) || !points[idx]) return alert('اختر نقطة أولاً');
+      const pt = points[idx];
+      const elev = getPointElevationMeters(pt);
+      const text = `${pt.lat.toFixed(6)}, ${pt.lon.toFixed(6)}${elev !== null ? ` (${elev.toFixed(1)}m)` : ''}`;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => alert('تم نسخ الإحداثيات')).catch(() => prompt('انسخ الإحداثيات:', text));
+      } else {
+        prompt('انسخ الإحداثيات:', text);
+      }
+    }
+
+    function triggerAttachPhoto() {
+      const idx = parseInt(document.getElementById('pointSelect').value, 10);
+      if (isNaN(idx) || !points[idx]) {
+        if (liveUserCoords) {
+          points.push({ lon: liveUserCoords.lon, lat: liveUserCoords.lat, note: 'نقطة صورة GPS', photoDataUrl: null });
+          updateAll(true);
+        } else {
+          return alert('أضف أو حدد نقطة على الخريطة أولاً');
+        }
+      }
+      document.getElementById('pointPhotoInput').click();
+    }
+
+    function handlePointPhoto(event) {
+      const file = event.target.files && event.target.files[0];
+      const idx = parseInt(document.getElementById('pointSelect').value, 10);
+      if (!file || isNaN(idx) || !points[idx]) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 900;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+          }
+          const c = document.createElement('canvas');
+          c.width = w;
+          c.height = h;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          points[idx].photoDataUrl = c.toDataURL('image/jpeg', 0.82);
+          updateSelectedPointDetails();
+          alert(`تم ربط الصورة بالنقطة #${idx + 1}`);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+      event.target.value = '';
+    }
+
+    function removePointPhoto() {
+      const idx = parseInt(document.getElementById('pointSelect').value, 10);
+      if (isNaN(idx) || !points[idx]) return;
+      points[idx].photoDataUrl = null;
+      updateSelectedPointDetails();
+    }
 
     function captureMapSnapshot() {
       try {
@@ -664,6 +809,7 @@
       document.getElementById('exagVal').textContent = exaggeration.toFixed(1) + 'x';
       map.setTerrain({ source: 'terrainDem', exaggeration: exaggeration });
       if (points.length >= 2) drawElevationProfile(points);
+      updateSelectedPointDetails();
     }
 
     function distanceMeters(p1, p2) {
@@ -781,7 +927,7 @@
         (pos) => {
           const { longitude, latitude } = pos.coords;
           updateUserPosLayer(longitude, latitude);
-          points.push({ lon: longitude, lat: latitude, note: 'نقطة GPS ميدانية' });
+          points.push({ lon: longitude, lat: latitude, note: 'نقطة GPS ميدانية', photoDataUrl: null });
           updateAll(true);
           map.flyTo({ center: [longitude, latitude], zoom: 17 });
         },
@@ -822,8 +968,7 @@
       }
 
       const sampled = pts.slice(0, 80).map((p, idx) => {
-        const raw = map.queryTerrainElevation([p.lon, p.lat]);
-        const elev = (typeof raw === 'number' && !isNaN(raw)) ? raw : null;
+        const elev = getPointElevationMeters(p);
         return { idx, elev };
       }).filter(item => item.elev !== null);
 
@@ -867,6 +1012,25 @@
       ctx.fill();
     }
 
+    function exportElevationCSV() {
+      if (!points.length) return alert('لا توجد نقاط لتصدير ارتفاعاتها');
+      const rows = ['index,latitude,longitude,elevation_m,delta_elev_from_prev_m,cumulative_dist_m,note'];
+      let cumDist = 0;
+      let prevElev = null;
+
+      points.forEach((p, i) => {
+        if (i > 0) cumDist += distanceMeters(points[i - 1], p);
+        const elev = getPointElevationMeters(p);
+        const deltaElev = (elev !== null && prevElev !== null) ? (elev - prevElev).toFixed(2) : '';
+        if (elev !== null) prevElev = elev;
+        rows.push(
+          `${i + 1},${p.lat},${p.lon},${elev !== null ? elev.toFixed(2) : ''},${deltaElev},${cumDist.toFixed(2)},"${String(p.note || '').replace(/"/g, '""')}"`
+        );
+      });
+
+      downloadFile('field-elevation.csv', rows.join('\n'), 'text/csv;charset=utf-8');
+    }
+
     function offsetLatLon(lat, lon, northM, eastM) {
       const R = 6378137;
       const dLat = northM / R;
@@ -893,7 +1057,7 @@
         const dAngle = 0.65;
         while (r <= radius) {
           const pt = offsetLatLon(center.lat, center.lon, r * Math.cos(angle), r * Math.sin(angle));
-          generated.push({ lon: pt.lon, lat: pt.lat, note: `Spiral r=${r.toFixed(1)}m` });
+          generated.push({ lon: pt.lon, lat: pt.lat, note: `Spiral r=${r.toFixed(1)}m`, photoDataUrl: null });
           r += (step * dAngle) / (2 * Math.PI);
           angle += dAngle;
         }
@@ -902,7 +1066,7 @@
           for (let x = -radius; x <= radius; x += step) {
             if (Math.hypot(x, y) <= radius) {
               const pt = offsetLatLon(center.lat, center.lon, y, x);
-              generated.push({ lon: pt.lon, lat: pt.lat, note: `Grid (${x}m, ${y}m)` });
+              generated.push({ lon: pt.lon, lat: pt.lat, note: `Grid (${x}m, ${y}m)`, photoDataUrl: null });
             }
           }
         }
@@ -921,20 +1085,23 @@
       points.forEach((p, i) => {
         const opt = document.createElement('option');
         opt.value = i;
-        opt.textContent = `نقطة #${i + 1}`;
+        opt.textContent = `نقطة #${i + 1}${p.photoDataUrl ? ' 📷' : ''}`;
         sel.appendChild(opt);
       });
       if (!points.length) {
         document.getElementById('pointNoteInput').value = '';
+        updateSelectedPointDetails();
         return;
       }
       sel.selectedIndex = selectLast ? points.length - 1 : Math.min(Math.max(0, prevIdx), points.length - 1);
       loadPointNote();
+      updateSelectedPointDetails();
     }
 
     function onPointSelectChange() {
       loadPointNote();
       updateNavigationGuide();
+      updateSelectedPointDetails();
     }
 
     function loadPointNote() {
@@ -1099,6 +1266,29 @@
       return res;
     }
 
+    function extractGeoJsonCoords(geom, note, out) {
+      if (!geom) return;
+      if (geom.type === 'Point' && Array.isArray(geom.coordinates)) {
+        const lon = parseFloat(geom.coordinates[0]);
+        const lat = parseFloat(geom.coordinates[1]);
+        if (!isNaN(lat) && !isNaN(lon)) out.push({ lat, lon, note, photoDataUrl: null });
+      } else if (geom.type === 'LineString' && Array.isArray(geom.coordinates)) {
+        geom.coordinates.forEach(c => {
+          const lon = parseFloat(c[0]);
+          const lat = parseFloat(c[1]);
+          if (!isNaN(lat) && !isNaN(lon)) out.push({ lat, lon, note, photoDataUrl: null });
+        });
+      } else if (geom.type === 'Polygon' && Array.isArray(geom.coordinates) && geom.coordinates[0]) {
+        geom.coordinates[0].forEach(c => {
+          const lon = parseFloat(c[0]);
+          const lat = parseFloat(c[1]);
+          if (!isNaN(lat) && !isNaN(lon)) out.push({ lat, lon, note, photoDataUrl: null });
+        });
+      } else if (geom.type === 'GeometryCollection' && Array.isArray(geom.geometries)) {
+        geom.geometries.forEach(g => extractGeoJsonCoords(g, note, out));
+      }
+    }
+
     function handleFileImport(event) {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
@@ -1116,27 +1306,44 @@
             const lon = parseFloat(cols[2]);
             if (idx === 0 && (isNaN(lat) || isNaN(lon))) return;
             if (!isNaN(lat) && !isNaN(lon)) {
-              imported.push({ lat, lon, note: cols[3] || '' });
+              imported.push({ lat, lon, note: cols[cols.length - 1] || '', photoDataUrl: null });
             }
           });
+        } else if (ext === 'geojson' || ext === 'json') {
+          try {
+            const gj = JSON.parse(text);
+            if (gj.type === 'FeatureCollection' && Array.isArray(gj.features)) {
+              gj.features.forEach(f => {
+                const note = String(f.properties?.note || f.properties?.name || f.properties?.desc || '');
+                extractGeoJsonCoords(f.geometry, note, imported);
+              });
+            } else if (gj.type === 'Feature') {
+              const note = String(gj.properties?.note || gj.properties?.name || gj.properties?.desc || '');
+              extractGeoJsonCoords(gj.geometry, note, imported);
+            } else {
+              extractGeoJsonCoords(gj, '', imported);
+            }
+          } catch {
+            return alert('ملف GeoJSON/JSON غير صالح');
+          }
         } else if (ext === 'gpx') {
           const xml = new DOMParser().parseFromString(text, 'application/xml');
           xml.querySelectorAll('wpt, trkpt').forEach(pt => {
             const lat = parseFloat(pt.getAttribute('lat'));
             const lon = parseFloat(pt.getAttribute('lon'));
             const desc = (pt.querySelector('desc')?.textContent || pt.querySelector('name')?.textContent || '').trim();
-            if (!isNaN(lat) && !isNaN(lon)) imported.push({ lat, lon, note: desc });
+            if (!isNaN(lat) && !isNaN(lon)) imported.push({ lat, lon, note: desc, photoDataUrl: null });
           });
         } else if (ext === 'kml') {
           const xml = new DOMParser().parseFromString(text, 'application/xml');
           xml.querySelectorAll('Placemark').forEach(pm => {
-            const desc = (pm.querySelector('description')?.textContent || '').trim();
+            const desc = (pm.querySelector('description')?.textContent || pm.querySelector('name')?.textContent || '').trim();
             const coordText = (pm.querySelector('coordinates')?.textContent || '').trim();
             coordText.split(/\s+/).forEach(tuple => {
               const parts = tuple.split(',');
               const lon = parseFloat(parts[0]);
               const lat = parseFloat(parts[1]);
-              if (!isNaN(lat) && !isNaN(lon)) imported.push({ lat, lon, note: desc });
+              if (!isNaN(lat) && !isNaN(lon)) imported.push({ lat, lon, note: desc, photoDataUrl: null });
             });
           });
         }
@@ -1180,7 +1387,11 @@
         zoom: map.getZoom(),
         updatedAt: new Date().toISOString()
       };
-      localStorage.setItem('field3d_projects', JSON.stringify(store));
+      try {
+        localStorage.setItem('field3d_projects', JSON.stringify(store));
+      } catch {
+        return alert('تعذر الحفظ المحلي: حجم الصور قد يتجاوز سعة التخزين المحلي للمتصفح');
+      }
       refreshProjectList();
       document.getElementById('savedProjects').value = name;
       alert('تم حفظ المشروع محلياً');
@@ -1191,7 +1402,7 @@
       const store = getProjectsStore();
       const proj = store[name];
       if (!proj) return alert('اختر مشروعاً محفوظاً');
-      points = proj.points || [];
+      points = (proj.points || []).map(p => ({ ...p, photoDataUrl: p.photoDataUrl || null }));
       exaggeration = proj.exaggeration || 2.0;
       document.getElementById('exagRange').value = exaggeration;
       setExaggeration(exaggeration);
@@ -1261,14 +1472,17 @@
       const cumDist = computeCumulativePathM(points).toFixed(1);
       const rowsHtml = points.map((p, i) => {
         const seg = i > 0 ? `${distanceMeters(points[i - 1], p).toFixed(1)} م` : '—';
-        return `<tr><td>${i + 1}</td><td>${p.lat.toFixed(6)}</td><td>${p.lon.toFixed(6)}</td><td>${seg}</td><td>${escapeXml(p.note || '—')}</td></tr>`;
+        const elev = getPointElevationMeters(p);
+        const elevStr = elev !== null ? `${elev.toFixed(1)} م` : '—';
+        const photoStr = p.photoDataUrl ? `<img src="${p.photoDataUrl}" style="max-width:120px;max-height:90px;border-radius:6px;" />` : '—';
+        return `<tr><td>${i + 1}</td><td>${p.lat.toFixed(6)}</td><td>${p.lon.toFixed(6)}</td><td>${elevStr}</td><td>${seg}</td><td>${escapeXml(p.note || '—')}</td><td>${photoStr}</td></tr>`;
       }).join('');
 
       const html = `<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>${title}</title>
-      <style>body{font-family:sans-serif;padding:24px;color:#0f172a}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #cbd5e1;padding:8px;text-align:right}th{background:#f1f5f9}</style></head>
+      <style>body{font-family:sans-serif;padding:24px;color:#0f172a}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #cbd5e1;padding:8px;text-align:right;vertical-align:middle}th{background:#f1f5f9}</style></head>
       <body><h1>${title}</h1><p>التاريخ: ${new Date().toLocaleString('ar')}</p>
       <p><strong>المساحة:</strong> ${m2} م² (${ha} هكتار) | <strong>المسار التراكمي:</strong> ${cumDist} م | <strong>عدد النقاط:</strong> ${points.length}</p>
-      <table><thead><tr><th>#</th><th>خط العرض (Lat)</th><th>خط الطول (Lon)</th><th>المسافة عن السابقة</th><th>الملاحظة</th></tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
+      <table><thead><tr><th>#</th><th>خط العرض (Lat)</th><th>خط الطول (Lon)</th><th>الارتفاع</th><th>المسافة عن السابقة</th><th>الملاحظة</th><th>الصورة</th></tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
       downloadFile('survey-report.html', html, 'text/html;charset=utf-8');
     }
   </script>
